@@ -1,74 +1,13 @@
-# some useful environment variables:
-#
-# TORCH_CUDA_ARCH_LIST
-#   specify which CUDA architectures to build for
-#
-# IGNORE_TORCH_VER
-#   ignore version requirements for PyTorch
-
 import os
 from setuptools import setup, find_packages
 import importlib
-from pkg_resources import parse_version
 import warnings
 import logging
 import glob
-import sys
-import subprocess  # Added import
+import subprocess
 
-# Define version constraints
-TORCH_MIN_VER = '1.6.0'
-TORCH_MAX_VER = '2.6.0'  # Updated to support newer PyTorch versions
-CYTHON_MIN_VER = '0.29.37'
-IGNORE_TORCH_VER = os.getenv('IGNORE_TORCH_VER') is not None
-
-# Module required before installation
-# trying to install it ahead turned out to be too unstable
-# Check for PyTorch
-torch_spec = importlib.util.find_spec("torch")
-if torch_spec is None:
-    raise ImportError(
-        f"Kaolin requires PyTorch >= {TORCH_MIN_VER}, <= {TORCH_MAX_VER}. "
-        "Please install it before proceeding."
-    )
-else:
-    import torch
-    torch_ver = parse_version(parse_version(torch.__version__).base_version)
-    if torch_ver < parse_version(TORCH_MIN_VER) or torch_ver > parse_version(TORCH_MAX_VER):
-        if IGNORE_TORCH_VER:
-            warnings.warn(
-                f"Kaolin is compatible with PyTorch >= {TORCH_MIN_VER}, <= {TORCH_MAX_VER}, "
-                f"but found version {torch.__version__}. Continuing as IGNORE_TORCH_VER is set."
-            )
-        else:
-            raise ImportError(
-                f"Kaolin requires PyTorch >= {TORCH_MIN_VER}, <= {TORCH_MAX_VER}, "
-                f"but found version {torch.__version__}. "
-                "Set IGNORE_TORCH_VER=1 to proceed with this version."
-            )
-
-# Check for Cython
-cython_spec = importlib.util.find_spec("cython")
-if cython_spec is None:
-    raise ImportError(
-        f"Kaolin requires Cython >= {CYTHON_MIN_VER}. Please install it before proceeding."
-    )
-else:
-    import Cython
-    cython_ver = parse_version(Cython.__version__)
-    if cython_ver < parse_version(CYTHON_MIN_VER):
-        warnings.warn(
-            f"Kaolin requires Cython >= {CYTHON_MIN_VER}, "
-            f"but found version {Cython.__version__}. This may cause compatibility issues."
-        )
-
-# Check for NumPy
-numpy_spec = importlib.util.find_spec("numpy")
-if numpy_spec is None:
-    raise ImportError(
-        "Kaolin requires NumPy. Please install it before proceeding."
-    )
-
+# Skip all version checks – Replicate forces PyTorch 2.7.0+
+import torch
 import numpy
 from torch.utils.cpp_extension import BuildExtension, CppExtension, CUDAExtension, CUDA_HOME
 
@@ -78,7 +17,6 @@ logger = logging.getLogger()
 logging.basicConfig(format='%(levelname)s - %(message)s')
 
 def get_cuda_bare_metal_version(cuda_dir):
-    """Get CUDA version from nvcc."""
     raw_output = subprocess.check_output([cuda_dir + "/bin/nvcc", "-V"], universal_newlines=True)
     output = raw_output.split()
     release_idx = output.index("release") + 1
@@ -134,13 +72,11 @@ a comprehensive model zoo comprising many state-of-the-art 3D deep learning arch
 for future research endeavours.
 """
 
-# Version handling
 version_txt = os.path.join(cwd, 'version.txt')
 with open(version_txt) as f:
     version = f.readline().strip()
 
 def write_version_file():
-    """Write version to kaolin/version.py."""
     version_path = os.path.join(cwd, 'kaolin', 'version.py')
     with open(version_path, 'w') as f:
         f.write(f"__version__ = '{version}'\n")
@@ -148,7 +84,6 @@ def write_version_file():
 write_version_file()
 
 def get_requirements():
-    """Read runtime dependencies from requirements files."""
     requirements = []
     with open(os.path.join(cwd, 'tools', 'viz_requirements.txt'), 'r') as f:
         requirements.extend(line.strip() for line in f)
@@ -157,16 +92,13 @@ def get_requirements():
     return requirements
 
 def get_scripts():
-    """Return list of scripts to install."""
     return ['kaolin/experimental/dash3d/kaolin-dash3d']
 
 def get_extensions():
-    """Define C++ and CUDA extensions."""
     extra_compile_args = {'cxx': ['-O3']}
     define_macros = []
     include_dirs = []
     sources = glob.glob('kaolin/csrc/**/*.cpp', recursive=True)
-    # FORCE_CUDA is for cross-compilation in docker build
     is_cuda = torch.cuda.is_available() or os.getenv('FORCE_CUDA', '0') == '1'
 
     if is_cuda:
@@ -188,11 +120,9 @@ def get_extensions():
         )
     ]
     
-    # Replace cudart with cudart_static
     for ext in extensions:
         ext.libraries = ['cudart_static' if x == 'cudart' else x for x in ext.libraries]
 
-    # Cython extensions
     use_cython = True
     ext_suffix = '.pyx' if use_cython else '.cpp'
     cython_extensions = [
@@ -216,7 +146,6 @@ def get_extensions():
     return extensions + cython_extensions
 
 def get_include_dirs():
-    """Get include directories for CUDA builds."""
     include_dirs = []
     if torch.cuda.is_available() or os.getenv('FORCE_CUDA', '0') == '1':
         _, major, _ = get_cuda_bare_metal_version(CUDA_HOME)
